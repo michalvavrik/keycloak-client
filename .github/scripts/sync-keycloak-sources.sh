@@ -42,5 +42,26 @@ if [[ ! $PWD == *keycloak-client ]]; then
 fi;
 
 syncFiles client-common-synced
+
+# The Keycloak server uses RawJsonValue (a Jackson-version-agnostic wrapper) in some
+# representation classes. The keycloak-client publishes a Jackson 2-only artifact,
+# so we restore the original JsonNode type to preserve backward compatibility.
+echo_header "Restoring JsonNode API in client representations"
+cd client-common-synced/src/main/java
+for f in \
+  org/keycloak/representations/idm/ClientPolicyExecutorRepresentation.java \
+  org/keycloak/representations/idm/ClientPolicyConditionRepresentation.java \
+  org/keycloak/representations/idm/ClientPoliciesRepresentation.java \
+  org/keycloak/representations/idm/ClientProfilesRepresentation.java \
+  org/keycloak/representations/idm/RealmRepresentation.java; do
+  if grep -q 'RawJsonValue' "$f" 2>/dev/null; then
+    sed -i 's/import org.keycloak.json.RawJsonValue;/import com.fasterxml.jackson.databind.JsonNode;/' "$f"
+    sed -i 's/import org.keycloak.json.KeycloakJsonMapperFactory;/import org.keycloak.util.JsonSerialization;/' "$f"
+    sed -i 's/RawJsonValue/JsonNode/g' "$f"
+    sed -i 's/KeycloakJsonMapperFactory\.mapper()/JsonSerialization.mapper/g' "$f"
+  fi
+done
+cd ../../../..
+
 syncFiles admin-client
 syncFiles authz-client
